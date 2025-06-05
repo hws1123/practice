@@ -1,62 +1,197 @@
-
 import streamlit as st
-import pandas as pd
-import numpy as np
+import pyrebase
+import time
 
-# 📘 탭 1: 소개 페이지
-class IntroPage:
-    def render(self):
-        st.title("🎉 Streamlit 앱에 오신 것을 환영합니다")
-        st.markdown("이 앱은 클래스 기반 구조로 구성된 **멀티 탭 웹앱**입니다.")
-        st.caption("탭마다 고유한 클래스를 통해 구성됩니다.")
-
-
-# 📗 탭 2: 데이터 확인
-class DataPage:
-    def render(self):
-        st.title("📊 데이터 미리보기")
-        df = pd.DataFrame({
-            "이름": ["Alice", "Bob", "Charlie", "David"],
-            "점수": [85, 90, 78, 92]
-        })
-        st.write("데이터프레임을 아래에 보여드립니다:")
-        st.dataframe(df)
-
-
-# 📕 탭 3: 시각화
-class ChartPage:
-    def render(self):
-        st.title("📈 랜덤 차트")
-        data = pd.DataFrame(
-            np.random.randn(20, 3),
-            columns=["a", "b", "c"]
-        )
-        st.line_chart(data)
-
-
-# 📙 탭 4: 사용자 입력
-class InputPage:
-    def render(self):
-        st.title("📝 사용자 입력")
-        name = st.text_input("이름을 입력하세요:")
-        age = st.number_input("나이를 입력하세요:", 0, 120)
-
-        if name:
-            st.success(f"안녕하세요, {name}님! 나이는 {age}세로 입력하셨습니다.")
-
-
-# 각 탭을 이름과 클래스 인스턴스로 매핑
-tabs = {
-    "소개": IntroPage(),
-    "데이터": DataPage(),
-    "차트": ChartPage(),
-    "입력폼": InputPage()
+# ---------------------
+# Firebase 설정
+# ---------------------
+firebase_config = {
+    "apiKey": "",
+    "authDomain": "",
+    "databaseURL": "",
+    "projectId": "",
+    "storageBucket": "",
+    "messagingSenderId": "",
+    "appId": ""
 }
 
-# 탭 UI 생성
-selected_tab = st.tabs(list(tabs.keys()))
+# Firebase 초기화 및 서비스 연결
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+firestore = firebase.database()
+storage = firebase.storage()
 
-# 각 탭에 맞는 클래스 렌더링
-for i, key in enumerate(tabs.keys()):
-    with selected_tab[i]:
-        tabs[key].render()
+# ---------------------
+# 세션 상태 초기화
+# ---------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_email = ""
+    st.session_state.id_token = ""
+    st.session_state.user_name = ""
+    st.session_state.user_gender = "선택 안함"
+    st.session_state.user_phone = ""
+
+# ---------------------
+# 홈 페이지 클래스
+# ---------------------
+class Home:
+    def __init__(self,login_page, register_page, findpw_page):
+        st.title("🏠 Home")
+        if st.session_state.get("logged_in"):
+            st.success(f"{st.session_state.get('user_email')}님 환영합니다.")
+        else:
+            st.page_link(page=login_page, label="🔐 로그인")
+            st.page_link(page=register_page, label="📝 회원가입")
+            st.page_link(page=findpw_page, label="🔎 비밀번호 찾기")
+
+# ---------------------
+# 로그인 페이지 클래스
+# ---------------------
+class Login:
+    def __init__(self):
+        st.title("🔐 로그인")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        if st.button("로그인"):
+            try:
+                # Firebase 인증
+                user = auth.sign_in_with_email_and_password(email, password)
+                st.session_state.logged_in = True
+                st.session_state.user_email = email
+                st.session_state.id_token = user['idToken']
+
+                # Firestore에서 사용자 정보 불러오기
+                v =  firestore.child("users").child(email.replace(".", "_")).get()
+                user_info = v.val()
+
+                if user_info:
+                    st.session_state.user_name = user_info.get("name", "")
+                    st.session_state.user_gender = user_info.get("gender", "선택 안함")
+                    st.session_state.user_phone = user_info.get("phone", "")
+
+                st.success("로그인 성공!")
+                time.sleep(1)
+                st.rerun()
+            except Exception:
+                st.error("로그인 실패")
+
+# ---------------------
+# 회원가입 페이지 클래스
+# ---------------------
+class Register:
+    def __init__(self, login_page_url):
+        st.title("📝 회원가입")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        name = st.text_input("성명")
+        gender = st.selectbox("성별", ["선택 안함", "남성", "여성"])
+        phone = st.text_input("휴대전화번호")
+
+        if st.button("회원가입"):
+            try:
+                # Firebase 인증 생성
+                auth.create_user_with_email_and_password(email, password)
+                # Firestore에 사용자 정보 저장
+                firestore.child("users").child(email.replace(".", "_")).set({
+                    "email": email,
+                    "name": name,
+                    "gender": gender,
+                    "phone": phone,
+                    "role": "user"
+                })
+                st.success("회원가입 성공! 로그인 페이지로 이동합니다.")
+                time.sleep(1)
+                st.switch_page('pages/login.py')
+                #st.switch_page(Page_Login)
+            except Exception as e:
+                st.error("회원가입 실패")
+                st.exception(e)
+
+# ---------------------
+# 비밀번호 찾기 페이지 클래스
+# ---------------------
+class FindPassword:
+    def __init__(self):
+        st.title("🔎 비밀번호 찾기")
+        email = st.text_input("이메일")
+        if st.button("비밀번호 재설정 메일 전송"):
+            try:
+                auth.send_password_reset_email(email)
+                st.success("비밀번호 재설정 이메일을 전송했습니다.")
+                time.sleep(1)
+                st.rerun()
+            except:
+                st.error("이메일 전송 실패")
+
+# ---------------------
+# 사용자 정보 수정 페이지 클래스
+# ---------------------
+class UserInfo:
+    def __init__(self):
+        st.title("👤 사용자 정보")
+
+        # 입력 필드
+        email = st.session_state.get("user_email", "")
+        new_email = st.text_input("이메일", value=email)
+        name = st.session_state.get("user_name", "")
+        new_name = st.text_input("성명", value=name)
+        gender = st.session_state.get("user_gender", "선택 안함")
+        new_gender = st.selectbox("성별", ["선택 안함", "남성", "여성"],
+                               index=["선택 안함", "남성", "여성"].index(gender))
+        phone = st.session_state.get("user_phone", "")
+        new_phone = st.text_input("휴대전화번호", value=phone)
+
+        # 정보 수정 버튼
+        if st.button("수정"):
+            st.session_state.user_email = new_email
+            st.session_state.user_name = new_name
+            st.session_state.user_gender = new_gender
+            st.session_state.user_phone = new_phone
+
+            # Firestore에 정보 저장
+            firestore.child("users").child(new_email.replace(".", "_")).update({
+                "email": new_email,
+                "name": name,
+                "gender": gender,
+                "phone": phone
+            })
+
+            st.success("사용자 정보가 저장되었습니다.")
+            time.sleep(1)
+            st.rerun()
+
+# ——————————
+# 로그아웃 페이지 클래스
+# ——————————
+class Logout:
+    def __init__(self):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.id_token = ""
+        st.session_state.user_name = ""
+        st.session_state.user_gender = "선택 안함"
+        st.session_state.user_phone = ""
+        st.success("로그아웃 되었습니다.")
+        time.sleep(1)
+        st.rerun()
+
+# ——————————
+# 페이지 객체 생성 및 라우팅 정의
+# ——————————
+Page_Login = st.Page(Login, title="Login", icon="🔐", url_path="login")
+Page_Register = st.Page(lambda: Register(Page_Login), title="Register", icon="📝", url_path="register")
+Page_FindPW = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
+Page_Home = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), title="Home", icon="🏠", url_path="home", default=True)
+Page_User = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
+Page_Logout = st.Page(Logout, title="Logout", icon="🔓", url_path="logout")
+
+# ——————————
+# 네비게이션 실행
+# ——————————
+if st.session_state.logged_in:
+    pages = [Page_Home, Page_User, Page_Logout]
+else:
+    pages = [Page_Home, Page_Login, Page_Register, Page_FindPW]
+selected_page = st.navigation(pages)
+selected_page.run()
