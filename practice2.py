@@ -29,19 +29,19 @@ if "logged_in" not in st.session_state:
     st.session_state.id_token = ""
 
 # ---------------------
-# 로그인 페이지
+# 로그인 페이지 클래스
 # ---------------------
-class Login:
-    def __init__(self):
+class LoginPage:
+    def show(self):
         st.title("🔐 로그인")
         email = st.text_input("이메일", key="login_email")
         password = st.text_input("비밀번호", type="password", key="login_pw")
-        if st.button("로그인", key="login_button"):
+        if st.button("로그인", key="login_btn"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
                 st.session_state.logged_in = True
                 st.session_state.user_email = email
-                st.session_state.id_token = user['idToken']
+                st.session_state.id_token = user["idToken"]
                 st.success("로그인 성공!")
                 time.sleep(1)
                 st.rerun()
@@ -49,14 +49,14 @@ class Login:
                 st.error("로그인 실패")
 
 # ---------------------
-# 회원가입 페이지
+# 회원가입 페이지 클래스
 # ---------------------
-class Register:
-    def __init__(self):
+class RegisterPage:
+    def show(self):
         st.title("📝 회원가입")
         email = st.text_input("이메일", key="register_email")
         password = st.text_input("비밀번호", type="password", key="register_pw")
-        if st.button("회원가입", key="register_button"):
+        if st.button("회원가입", key="register_btn"):
             try:
                 auth.create_user_with_email_and_password(email, password)
                 firestore.child("users").child(email.replace(".", "_")).set({
@@ -67,10 +67,10 @@ class Register:
                 st.error("회원가입 실패")
 
 # ---------------------
-# 로그아웃
+# 로그아웃 클래스
 # ---------------------
-class Logout:
-    def __init__(self):
+class LogoutPage:
+    def show(self):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
         st.session_state.id_token = ""
@@ -79,10 +79,10 @@ class Logout:
         st.rerun()
 
 # ---------------------
-# 일기장 페이지
+# 일기장 페이지 클래스
 # ---------------------
-class Diary:
-    def __init__(self):
+class DiaryPage:
+    def show(self):
         st.title("📘 나의 일기장")
 
         user_id = st.session_state.user_email.replace(".", "_")
@@ -92,7 +92,7 @@ class Diary:
         entry_date = st.date_input("날짜", value=date.today(), key="diary_date")
         content = st.text_area("내용을 입력하세요", height=200, key="diary_content")
 
-        if st.button("저장", key="save_diary"):
+        if st.button("저장", key="save_diary_btn"):
             if not content.strip():
                 st.warning("내용을 입력해주세요.")
             else:
@@ -108,26 +108,23 @@ class Diary:
         entries = diary_ref.get().val()
         if entries:
             for day, entry in sorted(entries.items(), reverse=True):
-                with st.expander(f"📅 {day}", expanded=False):
+                with st.expander(f"📅 {day}"):
                     st.write(entry.get("content", ""))
         else:
             st.info("작성된 일기가 없습니다.")
 
 # ---------------------
-# 페이지 등록 및 실행
+# 페이지 실행 로직
 # ---------------------
-pages = {
-    "로그인": Login,
-    "회원가입": Register,
-    "일기장": Diary,
-    "로그아웃": Logout
-}
-
-# 메뉴 분기
 if st.session_state.logged_in:
-    choice = st.sidebar.selectbox("메뉴", ["일기장", "로그아웃"], key="menu_loggedin")
+    menu = st.sidebar.radio("메뉴", ["일기장", "로그아웃"], key="menu_auth")
+    if menu == "일기장":
+        DiaryPage().show()
+    elif menu == "로그아웃":
+        LogoutPage().show()
 else:
-    choice = st.sidebar.selectbox("메뉴", ["로그인", "회원가입"], key="menu_guest")
-
-# 해당 페이지 실행
-pages[choice]().__init__()
+    menu = st.sidebar.radio("메뉴", ["로그인", "회원가입"], key="menu_guest")
+    if menu == "로그인":
+        LoginPage().show()
+    elif menu == "회원가입":
+        RegisterPage().show()
