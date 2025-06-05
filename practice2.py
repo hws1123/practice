@@ -108,3 +108,26 @@ class Diary:
         entries = diary_ref.get().val()
         if entries:
             for day, entry in sorted(entries.items(), reverse=True):
+                with st.expander(f"📅 {day}"):
+                    st.write(entry.get("content", ""))
+        else:
+            st.info("작성된 일기가 없습니다.")
+
+# ---------------------
+# 페이지 등록 및 실행
+# ---------------------
+pages = {
+    "로그인": Login,
+    "회원가입": Register,
+    "일기장": Diary,
+    "로그아웃": Logout
+}
+
+# 메뉴 분기
+if st.session_state.logged_in:
+    choice = st.sidebar.selectbox("메뉴", ["일기장", "로그아웃"])
+else:
+    choice = st.sidebar.selectbox("메뉴", ["로그인", "회원가입"])
+
+# 해당 페이지 실행
+pages[choice]().__init__()
