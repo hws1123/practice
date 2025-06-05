@@ -34,9 +34,9 @@ if "logged_in" not in st.session_state:
 class Login:
     def __init__(self):
         st.title("🔐 로그인")
-        email = st.text_input("이메일")
-        password = st.text_input("비밀번호", type="password")
-        if st.button("로그인"):
+        email = st.text_input("이메일", key="login_email")
+        password = st.text_input("비밀번호", type="password", key="login_pw")
+        if st.button("로그인", key="login_button"):
             try:
                 user = auth.sign_in_with_email_and_password(email, password)
                 st.session_state.logged_in = True
@@ -54,9 +54,9 @@ class Login:
 class Register:
     def __init__(self):
         st.title("📝 회원가입")
-        email = st.text_input("이메일")
-        password = st.text_input("비밀번호", type="password")
-        if st.button("회원가입"):
+        email = st.text_input("이메일", key="register_email")
+        password = st.text_input("비밀번호", type="password", key="register_pw")
+        if st.button("회원가입", key="register_button"):
             try:
                 auth.create_user_with_email_and_password(email, password)
                 firestore.child("users").child(email.replace(".", "_")).set({
@@ -89,10 +89,10 @@ class Diary:
         diary_ref = firestore.child("diary").child(user_id)
 
         st.subheader("✏️ 오늘의 일기 작성")
-        entry_date = st.date_input("날짜", value=date.today())
-        content = st.text_area("내용을 입력하세요", height=200)
+        entry_date = st.date_input("날짜", value=date.today(), key="diary_date")
+        content = st.text_area("내용을 입력하세요", height=200, key="diary_content")
 
-        if st.button("저장"):
+        if st.button("저장", key="save_diary"):
             if not content.strip():
                 st.warning("내용을 입력해주세요.")
             else:
@@ -108,7 +108,7 @@ class Diary:
         entries = diary_ref.get().val()
         if entries:
             for day, entry in sorted(entries.items(), reverse=True):
-                with st.expander(f"📅 {day}"):
+                with st.expander(f"📅 {day}", expanded=False):
                     st.write(entry.get("content", ""))
         else:
             st.info("작성된 일기가 없습니다.")
@@ -125,9 +125,9 @@ pages = {
 
 # 메뉴 분기
 if st.session_state.logged_in:
-    choice = st.sidebar.selectbox("메뉴", ["일기장", "로그아웃"])
+    choice = st.sidebar.selectbox("메뉴", ["일기장", "로그아웃"], key="menu_loggedin")
 else:
-    choice = st.sidebar.selectbox("메뉴", ["로그인", "회원가입"])
+    choice = st.sidebar.selectbox("메뉴", ["로그인", "회원가입"], key="menu_guest")
 
 # 해당 페이지 실행
 pages[choice]().__init__()
