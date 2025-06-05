@@ -1,69 +1,110 @@
-# multi_page_app.py
 import streamlit as st
-import pandas as pd
-import numpy as np
+import pyrebase
+import time
+from datetime import date
 
-# -------------------------
-# Home Page
-# -------------------------
-class HomePage:
+# ---------------------
+# Firebase 설정
+# ---------------------
+firebase_config = {
+    "apiKey": "AIzaSyCswFmrOGU3FyLYxwbNPTp7hvQxLfTPIZw",
+    "authDomain": "sw-projects-49798.firebaseapp.com",
+    "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
+    "projectId": "sw-projects-49798",
+    "storageBucket": "sw-projects-49798.appspot.com",
+    "messagingSenderId": "812186368395",
+    "appId": "1:812186368395:web:be2f7291ce54396209d78e"
+}
+
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+firestore = firebase.database()
+
+# ---------------------
+# 세션 상태 초기화
+# ---------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_email = ""
+    st.session_state.id_token = ""
+
+# ---------------------
+# 로그인 페이지
+# ---------------------
+class Login:
     def __init__(self):
-        st.title("🏠 Home Page")
-        st.write("이 앱은 `st.Page` 구조로 만들어진 멀티페이지 앱입니다.")
-        st.markdown("탭이 아닌 **URL 라우팅 기반** 페이지 전환 방식입니다.")
+        st.title("🔐 로그인")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        if st.button("로그인"):
+            try:
+                user = auth.sign_in_with_email_and_password(email, password)
+                st.session_state.logged_in = True
+                st.session_state.user_email = email
+                st.session_state.id_token = user['idToken']
+                st.success("로그인 성공!")
+                time.sleep(1)
+                st.rerun()
+            except:
+                st.error("로그인 실패")
 
-
-# -------------------------
-# Data Page
-# -------------------------
-class DataPage:
+# ---------------------
+# 회원가입 페이지
+# ---------------------
+class Register:
     def __init__(self):
-        st.title("📊 데이터 페이지")
-        df = pd.DataFrame({
-            "이름": ["Alice", "Bob", "Charlie", "David"],
-            "점수": [85, 90, 78, 92]
-        })
-        st.write("샘플 데이터:")
-        st.dataframe(df)
+        st.title("📝 회원가입")
+        email = st.text_input("이메일")
+        password = st.text_input("비밀번호", type="password")
+        if st.button("회원가입"):
+            try:
+                auth.create_user_with_email_and_password(email, password)
+                firestore.child("users").child(email.replace(".", "_")).set({
+                    "email": email
+                })
+                st.success("회원가입 성공! 로그인 해주세요.")
+            except:
+                st.error("회원가입 실패")
 
-
-# -------------------------
-# Chart Page
-# -------------------------
-class ChartPage:
+# ---------------------
+# 로그아웃
+# ---------------------
+class Logout:
     def __init__(self):
-        st.title("📈 차트 페이지")
-        chart_data = pd.DataFrame(
-            np.random.randn(20, 3),
-            columns=["a", "b", "c"]
-        )
-        st.line_chart(chart_data)
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.id_token = ""
+        st.success("로그아웃 되었습니다.")
+        time.sleep(1)
+        st.rerun()
 
-
-# -------------------------
-# Form Page
-# -------------------------
-class InputPage:
+# ---------------------
+# 일기장 페이지
+# ---------------------
+class Diary:
     def __init__(self):
-        st.title("📝 입력 페이지")
-        name = st.text_input("이름을 입력하세요")
-        age = st.number_input("나이를 입력하세요", 0, 120)
-        if name:
-            st.success(f"안녕하세요, {name}님! 나이는 {age}세입니다.")
+        st.title("📘 나의 일기장")
 
+        user_id = st.session_state.user_email.replace(".", "_")
+        diary_ref = firestore.child("diary").child(user_id)
 
-# -------------------------
-# 페이지 등록
-# -------------------------
-Page_Home  = st.Page(HomePage,  title="Home",  icon="🏠", url_path="home", default=True)
-Page_Data  = st.Page(DataPage,  title="Data",  icon="📊", url_path="data")
-Page_Chart = st.Page(ChartPage, title="Chart", icon="📈", url_path="chart")
-Page_Form  = st.Page(InputPage, title="Form",  icon="📝", url_path="form")
+        st.subheader("✏️ 오늘의 일기 작성")
+        entry_date = st.date_input("날짜", value=date.today())
+        content = st.text_area("내용을 입력하세요", height=200)
 
-pages = [Page_Home, Page_Data, Page_Chart, Page_Form]
+        if st.button("저장"):
+            if not content.strip():
+                st.warning("내용을 입력해주세요.")
+            else:
+                diary_ref.child(str(entry_date)).set({
+                    "date": str(entry_date),
+                    "content": content
+                })
+                st.success("✅ 일기 저장 완료!")
 
-# -------------------------
-# 네비게이션 실행
-# -------------------------
-selected_page = st.navigation(pages)
-selected_page.run()
+        st.divider()
+        st.subheader("📖 일기 목록")
+
+        entries = diary_ref.get().val()
+        if entries:
+            for day, entry in sorted(entries.items(), reverse=True):
